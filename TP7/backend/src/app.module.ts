@@ -8,13 +8,13 @@ import { HealthController } from './health.controller';
 
 @Module({
   imports: [],
-  controllers: [AppController],
+  controllers: [AppController, HealthController],
   providers: [
     AppService,
     KafkaClientProvider,
     OrchestratorConsumer,
     EventsGateway,
-    AppController, HealthController,
+    
   ],
 })
 export class AppModule {}
