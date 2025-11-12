@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flybondi - Buscador de Viajes para Nelsona</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>✈️ Buscador de Viajes</h1>
+            <p class="subtitle">Encuentra las mejores opciones de viaje con tu presupuesto</p>
+        </header>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="ciudadOrigen">Ciudad de Origen:</label>
+                <select id="ciudadOrigen">
+                    <option value="COR">Córdoba (COR)</option>
+                    <option value="EPA">El Palomar (EPA)</option>
+                    <option value="MDZ">Mendoza (MDZ)</option>
+                    <option value="BRC" selected>Bariloche (BRC)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="presupuesto">Presupuesto Máximo:</label>
+                <input type="number" id="presupuesto" value="800" min="0" step="10">
+            </div>
+
+            <div class="control-group">
+                <label for="modoVisualizacion">Modo de Visualización:</label>
+                <select id="modoVisualizacion">
+                    <option value="porDestino" selected>Mejor viaje por destino</option>
+                    <option value="todos">Todos los viajes (más baratos primero)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="cantidad">Cantidad a mostrar:</label>
+                <input type="number" id="cantidad" value="10" min="1" max="100">
+            </div>
+
+            <button id="buscarBtn" class="btn-primary">Buscar Viajes</button>
+        </div>
+
+        <div id="loading" class="loading hidden">
+            <p>Cargando datos...</p>
+        </div>
+
+        <div id="resultados" class="resultados hidden">
+            <div id="resumen" class="resumen"></div>
+            <div id="listaViajes" class="lista-viajes"></div>
+        </div>
+
+        <div id="error" class="error hidden"></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+
