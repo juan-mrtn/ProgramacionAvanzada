@@ -1,189 +1,305 @@
 'use client';
 
-import { useState } from 'react';
-import { io } from 'socket.io-client';
-import { v4 as uuid } from 'uuid';
+import { useState, useEffect, useRef } from 'react';
+import { io, Socket } from 'socket.io-client';
+
+interface Transaction {
+  transactionId: string;
+  fromAccount: string;
+  toAccount: string;
+  amount: number;
+  currency: string;
+  userId: string;
+}
 
 interface Event {
+  id: string;
   type: string;
+  version: number;
+  ts: number;
+  transactionId: string;
+  userId: string;
   payload: any;
 }
 
-const socket = io('http://localhost:3001', { transports: ['websocket'] });
-
 export default function Home() {
-  const [form, setForm] = useState({
-    userId: '',
+  // Creamos el socket inline (no usamos el singleton)
+  const socketRef = useRef<Socket | null>(null);
+  const [connected, setConnected] = useState(false);
+  const [events, setEvents] = useState<Event[]>([]);
+  // Ref para llevar un set de event IDs ya procesados y así evitar duplicados
+  const processedIdsRef = useRef<Set<string>>(new Set());
+  // Ref para recordar a qué transactionId ya estamos suscriptos y evitar re-suscripciones
+  const subscribedTxnRef = useRef<string | null>(null);
+  const [transaction, setTransaction] = useState<Transaction>({
+    transactionId: '',
     fromAccount: '',
     toAccount: '',
-    amount: '',
-    currency: 'ARS',
+    amount: 0,
+    currency: 'USD',
+    userId: '',
   });
-  const [events, setEvents] = useState<Event[]>([]);
-  const [transactionId, setTransactionId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    // Conectamos la instancia singleton solo una vez desde el frontend.
+    // Usamos manejadores nombrados para poder remover los listeners en el cleanup
+    function onConnect() {
+      setConnected(true);
+      console.log('✅ Conectado al WebSocket en puerto 3001');
+    }
+
+    function onDisconnect() {
+      setConnected(false);
+      console.log('❌ Desconectado del WebSocket');
+    }
+
+    function onConnectError(error: any) {
+      console.error('❌ Error de conexión WebSocket:', error);
+      console.log('💡 Verifica que el backend esté corriendo en el puerto 3001');
+    }
+
+    function onEvent(event: Event) {
+      // Debug: muestra cuántos listeners hay para 'event'
+      try {
+        const count = (socketRef.current as any)?.listenerCount ? (socketRef.current as any).listenerCount('event') : undefined;
+        console.log('Listeners for "event":', count);
+      } catch (e) {
+        // listenerCount may not be available in all builds/envs
+      }
+
+      if (event && event.id) {
+        if (processedIdsRef.current.has(event.id)) {
+          console.log('Duplicate event ignored (frontend dedupe):', event.id);
+          return;
+        }
+        processedIdsRef.current.add(event.id);
+      }
+
+      setEvents((prev) => [event, ...prev]);
+      console.log('Received event:', event);
+    }
+
+    function onSubscribed(data: any) {
+      console.log('Subscribed:', data);
+    }
+
+    // Crear el socket inline y conectarlo
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || (typeof window !== 'undefined' ? `http://${window.location.hostname}:3001` : 'http://localhost:3001');
+    const newSocket = io(wsUrl, {
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5,
+    });
+
+    socketRef.current = newSocket;
+
+    newSocket.on('connect', onConnect);
+    newSocket.on('disconnect', onDisconnect);
+    newSocket.on('connect_error', onConnectError);
+    newSocket.on('event', onEvent);
+    newSocket.on('subscribed', onSubscribed);
+
+    // Debug: log listener count after registration (guarded)
+    try {
+      const count = (socketRef.current as any)?.listenerCount ? (socketRef.current as any).listenerCount('event') : undefined;
+      console.log('After registering, listeners for "event":', count);
+    } catch (e) {}
+
+    return () => {
+      // Removemos listeners y desconectamos el socket al desmontar
+      if (socketRef.current) {
+        socketRef.current.off('connect', onConnect);
+        socketRef.current.off('disconnect', onDisconnect);
+        socketRef.current.off('connect_error', onConnectError);
+        socketRef.current.off('event', onEvent);
+        socketRef.current.off('subscribed', onSubscribed);
+
+        try {
+          const count = (socketRef.current as any)?.listenerCount ? (socketRef.current as any).listenerCount('event') : undefined;
+          console.log('After cleanup, listeners for "event":', count);
+        } catch (e) {}
+
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setEvents([]);
-    const txId = uuid();
-    setTransactionId(txId);
+    if (!transaction.fromAccount || !transaction.toAccount || !transaction.amount || !transaction.userId) {
+      alert('Por favor completa todos los campos');
+      return;
+    }
 
-    socket.emit('subscribe', { transactionId: txId, userId: form.userId });
+    try {
+      // Detectar la URL de la API dinámicamente
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 
+        (typeof window !== 'undefined'
+          ? `http://${window.location.hostname}:3000`
+          : 'http://localhost:3000');
+      
+      const response = await fetch(`${apiUrl}/transactions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(transaction),
+      });
 
-    await fetch('http://localhost:3000/transactions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, transactionId: txId }),
-    });
+      const data = await response.json();
+      const transactionId = data.transactionId;
 
-    setLoading(false);
+      if (socketRef.current && transactionId) {
+        // Evitar suscribir más de una vez a la misma transacción
+        if (subscribedTxnRef.current !== transactionId) {
+          socketRef.current.emit('subscribe', {
+            transactionId,
+            // NOTE: no enviamos userId para evitar doble-recepción si el backend
+            // emite tanto a `txn:{id}` como a `user:{id}` y el socket está
+            // unido a ambas salas.
+          });
+          subscribedTxnRef.current = transactionId;
+          console.log('Emitted subscribe for', transactionId);
+        } else {
+          console.log('Already subscribed to', transactionId);
+        }
+
+        setTransaction((prev) => ({ ...prev, transactionId }));
+      }
+    } catch (error) {
+      console.error('Error creating transaction:', error);
+      alert('Error al crear la transacción');
+    }
   };
 
-  socket.on('event', (event: Event) => {
-    setEvents(prev => [...prev, event]);
-  });
-
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-8">
-      <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8 text-center">Banking Events System</h1>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Form Panel */}
-          <div className="bg-gray-800 p-6 rounded-lg">
-            <h2 className="text-xl font-semibold mb-4">New Transaction</h2>
+    <main className="min-h-screen p-8 bg-gray-50">
+      <div className="max-w-6xl mx-auto">
+        <h1 className="text-3xl font-bold mb-8 text-gray-800">Sistema de Eventos Bancarios</h1>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Formulario */}
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <h2 className="text-xl font-semibold mb-4">Crear Transacción</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm mb-1">User ID</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  User ID
+                </label>
                 <input
                   type="text"
-                  required
-                  value={form.userId}
-                  onChange={e => setForm({ ...form, userId: e.target.value })}
-                  className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 focus:border-blue-500 outline-none"
-                  placeholder="usd-123"
+                  value={transaction.userId}
+                  onChange={(e) => setTransaction({ ...transaction, userId: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="user-123"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm mb-1">From Account</label>
-                  <input
-                    type="text"
-                    required
-                    value={form.fromAccount}
-                    onChange={e => setForm({ ...form, fromAccount: e.target.value })}
-                    className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600"
-                    placeholder="111-111"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm mb-1">To Account</label>
-                  <input
-                    type="text"
-                    required
-                    value={form.toAccount}
-                    onChange={e => setForm({ ...form, toAccount: e.target.value })}
-                    className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600"
-                    placeholder="222-222"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Cuenta Origen
+                </label>
+                <input
+                  type="text"
+                  value={transaction.fromAccount}
+                  onChange={(e) => setTransaction({ ...transaction, fromAccount: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="ACC-001"
+                />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm mb-1">Amount</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={form.amount}
-                    onChange={e => setForm({ ...form, amount: e.target.value })}
-                    className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600"
-                    placeholder="1,000.00"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm mb-1">Currency</label>
-                  <select
-                    value={form.currency}
-                    onChange={e => setForm({ ...form, currency: e.target.value })}
-                    className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600"
-                  >
-                    <option>ARS</option>
-                    <option>USD</option>
-                  </select>
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Cuenta Destino
+                </label>
+                <input
+                  type="text"
+                  value={transaction.toAccount}
+                  onChange={(e) => setTransaction({ ...transaction, toAccount: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="ACC-002"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Monto
+                </label>
+                <input
+                  type="number"
+                  value={transaction.amount || ''}
+                  onChange={(e) => setTransaction({ ...transaction, amount: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="100.00"
+                  step="0.01"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Moneda
+                </label>
+                <select
+                  value={transaction.currency}
+                  onChange={(e) => setTransaction({ ...transaction, currency: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                  <option value="ARS">ARS</option>
+                </select>
               </div>
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg disabled:opacity-50"
+                disabled={!connected}
+                className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
               >
-                {loading ? 'Initiating...' : 'Initiate Transaction'}
+                {connected ? 'Crear Transacción' : 'Conectando...'}
               </button>
             </form>
+            {transaction.transactionId && (
+              <div className="mt-4 p-3 bg-blue-50 rounded-md">
+                <p className="text-sm text-blue-800">
+                  <strong>Transaction ID:</strong> {transaction.transactionId}
+                </p>
+              </div>
+            )}
           </div>
 
-          {/* Timeline Panel */}
-          <div className="bg-gray-800 p-6 rounded-lg">
-            <h2 className="text-xl font-semibold mb-4">Transaction Timeline</h2>
-            <div className="space-y-4">
+          {/* Eventos */}
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">Eventos en Tiempo Real</h2>
+              <div className={`w-3 h-3 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+            </div>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
               {events.length === 0 ? (
-                <div className="text-center text-gray-400 py-12">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-4"></div>
-                  <p>No events yet. Create a transaction to see the timeline.</p>
-                </div>
+                <p className="text-gray-500 text-sm">No hay eventos aún</p>
               ) : (
-                events.map((event, i) => (
-                  <div key={i} className="flex items-center space-x-3">
-                    <div className="flex-shrink-0">
-                      {event.type.includes('FundsReserved') && <span className="text-green-500 text-2xl">Check</span>}
-                      {event.type.includes('FraudChecked') && (
-                        <span className={`text-2xl ${event.payload.risk === 'HIGH' ? 'text-yellow-500' : 'text-green-500'}`}>Warning</span>
-                      )}
-                      {event.type.includes('Committed') && <span className="text-green-500 text-2xl">Check</span>}
-                      {event.type.includes('Reversed') && <span className="text-red-500 text-2xl">Cross</span>}
-                      {event.type.includes('Notified') && <span className="text-blue-500 text-2xl">Bell</span>}
+                events.map((event) => (
+                  <div
+                    key={event.id}
+                    className="p-3 bg-gray-50 rounded-md border border-gray-200 text-sm"
+                  >
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="font-semibold text-blue-600">{event.type}</span>
+                      <span className="text-gray-500 text-xs">
+                        {new Date(event.ts).toLocaleTimeString()}
+                      </span>
                     </div>
-                    <div>
-                      <p className="font-medium">{event.type.replace('txn.', '')}</p>
-                      <p className="text-sm text-gray-400">
-                        {event.payload.risk && `Risk: ${event.payload.risk}`}
-                        {event.payload.reason && `Reason: ${event.payload.reason}`}
-                      </p>
+                    <div className="text-gray-600 text-xs">
+                      <p>Transaction ID: {event.transactionId}</p>
+                      <p>User ID: {event.userId}</p>
+                      <pre className="mt-1 text-xs bg-white p-2 rounded overflow-x-auto">
+                        {JSON.stringify(event.payload, null, 2)}
+                      </pre>
                     </div>
                   </div>
                 ))
               )}
             </div>
-            <div className="mt-6 flex justify-between">
-              <button
-                onClick={() => window.open('http://localhost:8080', '_blank')}
-                className="text-blue-400 hover:text-blue-300 text-sm"
-              >
-                View all Events
-              </button>
-              <button
-                onClick={() => {
-                  setEvents([]);
-                  setTransactionId(null);
-                  socket.emit('subscribe', { transactionId: null });
-                }}
-                className="text-red-400 hover:text-red-300 text-sm"
-              >
-                Clear
-              </button>
-              <button
-                onClick={() => socket.disconnect()}
-                className="text-red-400 hover:text-red-300 text-sm"
-              >
-                Disconnect
-              </button>
-            </div>
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
+

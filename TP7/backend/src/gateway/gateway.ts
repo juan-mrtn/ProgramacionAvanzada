@@ -1,57 +1,63 @@
-// src/gateway/gateway.ts
-import { WebSocketGateway, WebSocketServer, SubscribeMessage, MessageBody, ConnectedSocket, OnGatewayInit } from '@nestjs/websockets';
+import {
+  WebSocketGateway,
+  WebSocketServer,
+  SubscribeMessage,
+  MessageBody,
+  ConnectedSocket,
+  OnGatewayInit,
+} from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { OnModuleInit, Logger } from '@nestjs/common';
-import { ClientKafka, MessagePattern } from '@nestjs/microservices';
-import { Inject } from '@nestjs/common';
-import { EventEnvelope } from '../kafka/envelope';
-
-interface SubscribeDto {
-  transactionId?: string;
-  userId?: string;
-}
+import { Logger, Inject, OnModuleInit } from '@nestjs/common';
+import { ClientKafka } from '@nestjs/microservices';
 
 @WebSocketGateway(3001, { cors: { origin: '*' } })
-export class EventsGateway implements OnModuleInit, OnGatewayInit {
+export class EventsGateway implements OnGatewayInit, OnModuleInit {
   @WebSocketServer()
   server: Server;
+
   private readonly logger = new Logger('GatewayWS');
 
   constructor(@Inject('KAFKA_CLIENT') private client: ClientKafka) {}
-    afterInit(server: Server) {
+
+  afterInit(server: Server) {
     this.logger.log('WebSocket Gateway inicializado en puerto 3001');
-    }
+  }
 
   async onModuleInit() {
-    await this.client.subscribeToResponseOf('txn.events');
     await this.client.connect();
 
-    this.client.consumer?.subscribe({ topics: ['txn.events'] });
-    await this.client.consumer?.run({
+    // Crear un consumer separado para escuchar eventos de txn.events
+    const consumer = this.client.createClient().consumer({ groupId: 'gateway-group' });
+    await consumer.connect();
+    await consumer.subscribe({ topics: ['txn.events'] });
+
+    await consumer.run({
       eachMessage: async ({ message }) => {
         if (!message.value) {
           this.logger.warn('Received message with null value');
           return;
         }
-        const envelope: EventEnvelope = JSON.parse(message.value.toString());
+
+        const envelope = JSON.parse(message.value.toString());
         const { transactionId, userId } = envelope;
 
-        // Enviar a todos los clientes suscriptos a ese transactionId o userId
-        this.server.to(`txn:${transactionId}`).emit('event', envelope);
-        this.server.to(`user:${userId}`).emit('event', envelope);
-        this.logger.log(`Push WS → txn:${transactionId} (${envelope.type})`);
+  // Emit once to the transaction room. Emitting to both txn:{id} and
+  // user:{id} caused clients subscribed to both rooms to receive
+  // duplicate deliveries. Clients can subscribe to whichever room they
+  // need; server will publish to txn:{transactionId} only to avoid
+  // duplicate emissions.
+  this.server.to(`txn:${transactionId}`).emit('event', envelope);
+  this.logger.log(`Push WS → txn:${transactionId} (${envelope.type})`);
       },
     });
   }
 
   @SubscribeMessage('subscribe')
-  handleSubscribe(
-    @MessageBody() data: SubscribeDto,
-    @ConnectedSocket() client: Socket,
-  ) {
+  handleSubscribe(@MessageBody() data: { transactionId?: string; userId?: string }, @ConnectedSocket() client: Socket) {
     if (data.transactionId) client.join(`txn:${data.transactionId}`);
     if (data.userId) client.join(`user:${data.userId}`);
     this.logger.log(`Cliente suscrito a txn:${data.transactionId} user:${data.userId}`);
     client.emit('subscribed', { ok: true });
   }
 }
+

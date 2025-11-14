@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.3.0
@@ -75,6 +73,9 @@ services:
     container_name: banking-frontend
     ports:
       - "3002:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3000
+      NEXT_PUBLIC_WS_URL: http://localhost:3001
     depends_on:
       backend:
         condition: service_healthy

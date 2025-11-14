@@ -10,7 +10,6 @@ COPY package*.json ./
 RUN npm ci
 
 # Copia el resto del código fuente
-# ¡ASEGÚRATE DE QUE "public" NO ESTÉ EN TU ARCHIVO .dockerignore!
 COPY . .
 
 # Ejecuta el build (esto crea la carpeta "./dist")
@@ -33,14 +32,6 @@ RUN npm ci --omit=dev
 # --- ¡CAMBIO IMPORTANTE! ---
 # Copiamos la carpeta "dist" que generó "nest build"
 COPY --from=builder /app/dist ./dist
-
-# --- COPIA DE 'public' ---
-# Si tienes una carpeta "public" para assets estáticos, la copiamos también.
-#
-# ¡ATENCIÓN! Si este build falla diciendo "/app/public": not found",
-# significa que tu carpeta "public" ESTÁ EN TU ARCHIVO .dockerignore.
-# Debes quitar "public" de .dockerignore para que esto funcione.
-COPY --from=builder /app/public ./public
 
 # El puerto por defecto de NestJS es 3000
 EXPOSE 3000

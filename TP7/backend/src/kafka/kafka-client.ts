@@ -1,4 +1,3 @@
-// src/kafka/kafka-client.ts
 import { ClientKafka } from '@nestjs/microservices';
 
 export const KafkaClientProvider = {
@@ -13,3 +12,4 @@ export const KafkaClientProvider = {
     });
   },
 };
+

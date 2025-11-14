@@ -1,11 +1,11 @@
 // src/app.service.ts
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { ClientKafka } from '@nestjs/microservices';
 import { wrapEvent } from './kafka/envelope';
 import { v4 as uuid } from 'uuid';
 
 @Injectable()
-export class AppService {
+export class AppService implements OnModuleInit {
   constructor(@Inject('KAFKA_CLIENT') private client: ClientKafka) {}
 
   async onModuleInit() {
@@ -13,7 +13,9 @@ export class AppService {
   }
 
   async initiateTransaction(dto: any) {
-    const transactionId = uuid();
+    // Usar transactionId del DTO si existe, sino generar uno nuevo
+    const transactionId = dto.transactionId || uuid();
+    
     const event = wrapEvent(
       'txn.TransactionInitiated',
       transactionId,
