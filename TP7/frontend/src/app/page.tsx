@@ -45,17 +45,17 @@ export default function Home() {
     // Usamos manejadores nombrados para poder remover los listeners en el cleanup
     function onConnect() {
       setConnected(true);
-      console.log('✅ Conectado al WebSocket en puerto 3001');
+      console.log(' Conectado al WebSocket en puerto 3001');
     }
 
     function onDisconnect() {
       setConnected(false);
-      console.log('❌ Desconectado del WebSocket');
+      console.log(' Desconectado del WebSocket');
     }
 
     function onConnectError(error: any) {
-      console.error('❌ Error de conexión WebSocket:', error);
-      console.log('💡 Verifica que el backend esté corriendo en el puerto 3001');
+      console.error(' Error de conexión WebSocket:', error);
+      console.log(' Verifica que el backend esté corriendo en el puerto 3001');
     }
 
     function onEvent(event: Event) {

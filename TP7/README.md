@@ -584,7 +584,7 @@ docker-compose logs -f kafka
 2. Revisa los logs del backend
 3. Verifica que Kafka esté disponible
 
-## 📝 Notas Adicionales
+## Notas Adicionales
 
 - El sistema usa delays simulados para demostrar el procesamiento asíncrono
 - El riesgo de fraude se determina aleatoriamente (50% LOW, 50% HIGH)

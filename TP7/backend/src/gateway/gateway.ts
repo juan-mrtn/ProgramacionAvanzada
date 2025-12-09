@@ -17,7 +17,7 @@ export class EventsGateway implements OnGatewayInit, OnModuleInit {
 
   private readonly logger = new Logger('GatewayWS');
 
-  constructor(@Inject('KAFKA_CLIENT') private client: ClientKafka) {}
+  constructor(@Inject('KAFKA_CLIENT') private client: ClientKafka) { }
 
   afterInit(server: Server) {
     this.logger.log('WebSocket Gateway inicializado en puerto 3001');
@@ -41,22 +41,39 @@ export class EventsGateway implements OnGatewayInit, OnModuleInit {
         const envelope = JSON.parse(message.value.toString());
         const { transactionId, userId } = envelope;
 
-  // Emit once to the transaction room. Emitting to both txn:{id} and
-  // user:{id} caused clients subscribed to both rooms to receive
-  // duplicate deliveries. Clients can subscribe to whichever room they
-  // need; server will publish to txn:{transactionId} only to avoid
-  // duplicate emissions.
-  this.server.to(`txn:${transactionId}`).emit('event', envelope);
-  this.logger.log(`Push WS → txn:${transactionId} (${envelope.type})`);
+        // Emit once to the transaction room. Emitting to both txn:{id} and
+        // user:{id} caused clients subscribed to both rooms to receive
+        // duplicate deliveries. Clients can subscribe to whichever room they
+        // need; server will publish to txn:{transactionId} only to avoid
+        // duplicate emissions.
+        this.server.to(`txn:${transactionId}`).emit('event', envelope);
+        this.logger.log(`Push WS → txn:${transactionId} (${envelope.type})`);
       },
     });
   }
 
+  /**
+   * Handle subscription requests from clients.
+   * Clients join Socket.io rooms based on transactionId to receive events
+   * specific to their transaction. The server emits only to txn:{transactionId}
+   * rooms to avoid duplicate deliveries (see onModuleInit where we emit only once).
+   *
+   * NOTE: userId room joins are not used by the server (no emissions to user:{userId}).
+   * If you need per-user notifications in the future, add a separate emission path
+   * or modify onModuleInit to emit to both rooms with proper deduplication.
+   */
   @SubscribeMessage('subscribe')
-  handleSubscribe(@MessageBody() data: { transactionId?: string; userId?: string }, @ConnectedSocket() client: Socket) {
-    if (data.transactionId) client.join(`txn:${data.transactionId}`);
-    if (data.userId) client.join(`user:${data.userId}`);
-    this.logger.log(`Cliente suscrito a txn:${data.transactionId} user:${data.userId}`);
+  handleSubscribe(
+    @MessageBody() data: { transactionId?: string; userId?: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    if (data.transactionId) {
+      client.join(`txn:${data.transactionId}`);
+      this.logger.log(`Client ${client.id} joined room txn:${data.transactionId}`);
+    } else {
+      this.logger.warn('Subscribe message missing transactionId');
+    }
+
     client.emit('subscribed', { ok: true });
   }
 }

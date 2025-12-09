@@ -1,0 +1,32 @@
+services:
+  mongo:
+    image: mongo:latest
+    container_name: tp_mongo_db
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin
+    ports:
+      # Puerto estándar de MongoDB
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+
+  mongo-express:
+    image: mongo-express:latest
+    container_name: tp_mongo_ui
+    restart: always
+    ports:
+      # Interfaz web
+      - '8081:8081'
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: admin
+      # Le dice a mongo-express que se conecte al servicio 'mongo'
+      ME_CONFIG_MONGODB_SERVER: mongo
+      # Credenciales para el login de mongo-express (interfaz web)
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin
+
+volumes:
+  mongo_data:
