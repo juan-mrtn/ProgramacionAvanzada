@@ -53,7 +53,6 @@ app.post('/users', async (req, res) => {
         return res.status(400).json({ error: 'Nombre y email son requeridos' });
     }
 
-    // super basico sin validar email unico ni formato
     const newUser = {
         name,
         email,
@@ -86,7 +85,7 @@ app.put('/users/:id', async (req, res) => {
             email,
             }
         };
-        const result = await getDb().collection('users').updateOne({ _id: id }, { $set: updateDoc });
+        const result = await getDb().collection('users').updateOne({ _id: id },  updateDoc );
         if (result.matchedCount === 0) {
             return res.status(404).json({ error: 'Usuario no encontrado' });
         }
@@ -94,6 +93,7 @@ app.put('/users/:id', async (req, res) => {
         res.json(updatedUser);
 
     } catch (err) {
+        console.error(err);
         res.status(500).json({ message: 'Error al actualizar el usuario' });
     }
 });

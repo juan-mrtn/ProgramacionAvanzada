@@ -1,0 +1,114 @@
+/* Fallback CSS to emulate commonly used Tailwind utilities used by the app
+   This is temporary — load this from /fallback.css when Tailwind utilities
+   are not available so the UI remains usable and reasonably styled. */
+
+:root{
+  --background: 255 255% 100%;
+  --foreground: 22 22% 10%;
+}
+
+html,body{height:100%;}
+body{margin:0;font-family:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background:#fff;color:#111}
+
+/* layout helpers */
+.max-w-7xl{max-width:1200px}
+.mx-auto{margin-left:auto;margin-right:auto}
+.px-4{padding-left:1rem;padding-right:1rem}
+.py-8{padding-top:2rem;padding-bottom:2rem}
+.p-6{padding:1.5rem}
+.p-4{padding:1rem}
+.pt-1{padding-top:0.25rem}
+.pb-4{padding-bottom:1rem}
+.sticky{position:sticky}
+.top-8{top:2rem}
+
+.grid{display:grid}
+.grid-cols-1{grid-template-columns:1fr}
+@media(min-width:1024px){.lg\:grid-cols-3{grid-template-columns:repeat(3,1fr)}}
+.gap-8{gap:2rem}
+.gap-4{gap:1rem}
+
+.flex{display:flex}
+.items-center{align-items:center}
+.items-start{align-items:flex-start}
+.justify-between{justify-content:space-between}
+.justify-center{justify-content:center}
+.flex-1{flex:1}
+.flex-shrink-0{flex-shrink:0}
+
+.rounded-lg{border-radius:0.5rem}
+.rounded-full{border-radius:9999px}
+.shadow-sm{box-shadow:0 1px 2px rgba(0,0,0,0.05)}
+.hover\:shadow-md:hover{box-shadow:0 6px 20px rgba(2,6,23,0.08)}
+.transition{transition:all 180ms ease}
+.transform{transform:translateZ(0)}
+.hover\:-translate-y-0\.5:hover{transform:translateY(-2px)}
+.cursor-pointer{cursor:pointer}
+
+.text-xs{font-size:0.75rem}
+.text-sm{font-size:0.875rem}
+.text-lg{font-size:1.125rem}
+.font-semibold{font-weight:600}
+.font-bold{font-weight:700}
+
+.border{border:1px solid rgba(0,0,0,0.08)}
+.border-border{border-color:rgba(0,0,0,0.08)}
+.border-2{border-width:2px}
+.border-primary{border-color:rgba(59,130,246,0.25)}
+.bg-white{background:#fff}
+.bg-background{background:#f8fafc}
+.bg-blue-50{background:#eff6ff}
+.text-gray-500{color:#6b7280}
+.text-gray-600{color:#4b5563}
+.text-gray-700{color:#374151}
+.text-foreground{color:#0f172a}
+
+/* Primary button and utility colors */
+.bg-primary{background:linear-gradient(180deg,#2563eb,#1e40af);}
+.text-white{color:#fff}
+.py-2{padding-top:0.5rem;padding-bottom:0.5rem}
+.w-full{width:100%}
+.font-semibold{font-weight:600}
+.opacity-50{opacity:0.5}
+.disabled\:opacity-50:disabled{opacity:0.5}
+.hover\:opacity-90:hover{opacity:0.9}
+
+/* Spinner */
+.animate-spin{animation:spin 1s linear infinite}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+
+/* Small sizing utilities */
+.h-4{height:1rem}
+.w-4{width:1rem}
+.gap-2{gap:0.5rem}
+.rounded{border-radius:0.375rem}
+
+.card{background:#fff;border-radius:0.75rem;border:1px solid rgba(0,0,0,0.06);box-shadow:0 8px 24px rgba(2,6,23,0.03)}
+.selected-card{transform:translateY(-6px);box-shadow:0 18px 40px rgba(2,6,23,0.12);border-color:rgba(59,130,246,0.4)}
+.app-header{background:linear-gradient(90deg,rgba(59,130,246,0.06),rgba(99,102,241,0.04));border-radius:0.75rem;padding:1.25rem}
+
+.badge{display:inline-flex;align-items:center;padding:0.25rem 0.5rem;border-radius:9999px;font-weight:600;font-size:0.75rem}
+.status-badge{background:linear-gradient(180deg,#ef4444,#dc2626);color:white;padding:0.45rem 0.8rem;border-radius:9999px}
+
+.timeline{position:relative}
+.event-card{padding:1rem;border-radius:0.75rem}
+.event-icon{width:3rem;height:3rem;display:flex;align-items:center;justify-content:center}
+
+/* simple responsive adjustments */
+@media(min-width:768px){
+  .grid-cols-1{grid-template-columns:1fr}
+}
+
+/* Inputs: make form usable */
+input[type="text"],input[type="number"],select,textarea{
+  width:100%;padding:0.5rem;border:1px solid rgba(0,0,0,0.08);border-radius:0.375rem;margin-bottom:0.5rem;background:#fff;box-sizing:border-box
+}
+
+button{cursor:pointer}
+
+/* small utility for centered empty state */
+.text-center{text-align:center}
+
+/* ensure header full width area */
+.topbar{background:#0b0b0c;color:#fff;padding:0.75rem 0}
+.brand-logo{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,#2563eb,#7c3aed);display:flex;align-items:center;justify-content:center;color:white;font-weight:700}
